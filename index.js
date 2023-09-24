@@ -19,14 +19,13 @@ const verifyJWT = (req, res, next)=>{
   //bearer token
   const token = authorization.split('')[1];
 
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded)=>{
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded)=>{
     if(err){
       return res.status(401).send({error: true, message: 'unauthorized access'})
     }
     req.decoded = decoded;
     next();
-
-  })
+  }) 
 }
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -45,7 +44,7 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
-
+    
     const usersCollection = client.db("BistroDb").collection("users");
     const menuCollection = client.db("BistroDb").collection("menu");
     const reviewsCollection = client.db("BistroDb").collection("reviews");
@@ -69,28 +68,26 @@ async function run() {
       next();
     }
 
-    /* 
-    * 1. use jwt token : verifyJWT
-    * 2. 
-    * 3. 
-    * 4. 
-    * 5.
-    */
+     
+    //* 1. use jwt token : verifyJWT
+    //* 2. 
+    //* 3. 
+    //* 4. 
+    //* 5.
+    
 
     //login 404 page redirection 
      app.get ('/users', verifyJWT,verifyAdmin, async(req, res) =>{
       const result = await usersCollection.find().toArray();
       res.send(result);
     }) 
-
     //users related api
 
     app.post('/users', async(req, res ) => {
       const user = req.body;
-      //console.log(user);
       const query = {email: user.email}
       const existingUser = await usersCollection.findOne(query);
-      console.log('existing user', existingUser)
+
       if(existingUser){
         return res.send({message: 'user already exits'})
       }
@@ -111,7 +108,7 @@ async function run() {
       res.send(result);
     })
 
-    /* All Users part */
+    // All Users part 
 
     app.patch('/users/admin/:id', async(req, res) =>{
       const id = req.params.id;
@@ -133,7 +130,6 @@ async function run() {
       const result = await menuCollection.find().toArray();
       res.send(result);
     })
-
 
     app.post('/menu', verifyJWT, verifyAdmin, async(req, res) =>{
       const newItem = req.body;
@@ -190,7 +186,7 @@ async function run() {
     //create payment intent 
     app.post('/create-payment-intent', async(req, res) =>{
       const {price} = req.body;
-      const amount = price *100;
+      const amount = parseInt(price * 100);
       console.log(price, amount)
       const paymentIntent = await stripe.paymentIntent.create({
         amount: amount,
@@ -210,7 +206,78 @@ async function run() {
       const deleteResult = await cartCollection.deleteMany(query)
 
       res.send({insertResult, deleteResult});
+    }) 
+
+
+    app.get('/admin-stats', verifyJWT, verifyAdmin, async(req, res) =>{
+      const users = await usersCollection.estimatedDocumentCount()
+      const products = await menuCollection.estimatedDocumentCount()
+      const orders = await paymentCollection.estimatedDocumentCount()
     })
+
+    //best way to get some of filed is to use group and some operant
+
+
+    /* const payments = await paymentCollection.find().toArray();
+    const revenue = payments.reduce((sum , payment)= sum + payment.price, 0)
+
+    res.send({
+      users,
+      products,
+      orders
+    }) 
+ */
+
+     /**
+     * ---------------
+     * BANGLA SYSTEM(second best solution)
+     * ---------------
+     * 1. load all payments
+     * 2. for each payment, get the menuItems array
+     * 3. for each item in the menuItems array get the menuItem from the menu collection
+     * 4. put them in an array: allOrderedItems
+     * 5. separate allOrderedItems by category using filter
+     * 6. now get the quantity by using length: pizzas.length
+     * 7. for each category use reduce to get the total amount spent on this category
+     * 
+    */
+
+     app.get('/order-stats', /* verifyJWT, verifyAdmin, */ async(req, res) =>{
+      const pipeline = [
+        {
+          $lookup: {
+            from: 'menu',
+            localField: 'menuItems',
+            foreignField: '_id',
+            as: 'menuItemsData'
+          }
+        },
+        {
+          $unwind: '$menuItemsData'
+        },
+        {
+          $group: {
+            _id: '$menuItemsData.category',
+            count: { $sum: 1 },
+            total: { $sum: '$menuItemsData.price' }
+          }
+        },
+        {
+          $project: {
+            category: '$_id',
+            count: 1,
+            total: { $round: ['$total', 2] },
+            _id: 0
+          }
+        }
+      ];
+
+      const result = await paymentCollection.aggregate(pipeline).toArray()
+      res.send(result)
+
+    })
+
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
@@ -229,3 +296,17 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
   console.log(`Bisto boss is setting ${port}`)
 })
+
+
+/**
+ * --------------------------------
+ *      NAMING CONVENTION
+ * --------------------------------
+ * users : userCollection
+ * app.get('/users')
+ * app.get('/users/:id')
+ * app.post('/users')
+ * app.patch('/users/:id')
+ * app.put('/users/:id')
+ * app.delete('/users/:id')
+*/ 
